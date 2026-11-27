@@ -13,6 +13,9 @@ sealed interface ShortcutAction {
         val shift: Boolean = false,
     ) : ShortcutAction
 
+    // Sisipkan pasangan dengan kursor di tengah; teks terpilih akan dibungkus
+    data class Wrap(val open: String, val close: String) : ShortcutAction
+
     object SelectLine : ShortcutAction
 }
 
@@ -35,6 +38,9 @@ private fun combo(
     shift: Boolean = false,
 ) = Shortcut(label, description, ShortcutAction.Combo(keyCode, ctrl, shift))
 
+private fun wrap(label: String, description: String, open: String, close: String) =
+    Shortcut(label, description, ShortcutAction.Wrap(open, close))
+
 object Shortcuts {
     private val selectAll = menu("Semua", "Pilih semua", android.R.id.selectAll)
     private val copy = menu("Salin", "Salin", android.R.id.copy)
@@ -46,12 +52,29 @@ object Shortcuts {
     private val left = combo("←", "Kursor kiri", KeyEvent.KEYCODE_DPAD_LEFT)
     private val right = combo("→", "Kursor kanan", KeyEvent.KEYCODE_DPAD_RIGHT)
 
+    private val parens = wrap("( )", "Kurung biasa", "(", ")")
+    private val braces = wrap("{ }", "Kurung kurawal", "{", "}")
+    private val brackets = wrap("[ ]", "Kurung siku", "[", "]")
+    private val angles = wrap("< >", "Kurung sudut", "<", ">")
+    private val doubleQuote = wrap("\" \"", "Kutip dua", "\"", "\"")
+    private val singleQuote = wrap("' '", "Kutip satu", "'", "'")
+    private val backtick = wrap("` `", "Backtick", "`", "`")
+    private val template = wrap("\${ }", "Template string", "\${", "}")
+
     // Baris cepat di atas keyboard
-    val quick = listOf(selectAll, copy, cut, paste, undo, redo, tab, left, right)
+    val quick = listOf(
+        selectAll, copy, cut, paste, undo, redo,
+        parens, braces, brackets, doubleQuote,
+        tab, left, right,
+    )
 
     // Isi panel lengkap (tombol ☰)
     val groups = listOf(
         ShortcutGroup("Edit", listOf(selectAll, copy, cut, paste, undo, redo)),
+        ShortcutGroup(
+            "Pasangan (kursor di tengah)",
+            listOf(parens, braces, brackets, angles, doubleQuote, singleQuote, backtick, template),
+        ),
         ShortcutGroup(
             "Gerak kursor",
             listOf(
