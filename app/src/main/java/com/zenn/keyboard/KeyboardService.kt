@@ -7,6 +7,7 @@ import android.view.inputmethod.EditorInfo
 class KeyboardService : InputMethodService(), KeyboardUi.Listener {
 
     private var ui: KeyboardUi? = null
+    private val runner = ShortcutRunner { currentInputConnection }
 
     override fun onCreateInputView(): View {
         val built = KeyboardUi(this, this)
@@ -44,5 +45,9 @@ class KeyboardService : InputMethodService(), KeyboardUi.Listener {
         } else {
             ic.commitText("\n", 1)
         }
+    }
+
+    override fun onShortcut(shortcut: Shortcut) {
+        runner.run(shortcut.action)
     }
 }
