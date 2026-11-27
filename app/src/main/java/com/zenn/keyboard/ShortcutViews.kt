@@ -15,22 +15,39 @@ private const val CHIP_HEIGHT_DP = 44
 private const val CHIP_GAP_DP = 3
 private const val PANEL_COLUMNS = 4
 
-// Baris pintasan cepat: tombol ☰ + chip yang bisa digeser ke samping
+enum class PanelMode { NONE, SHORTCUTS, CLIPBOARD }
+
+// Judul kecil untuk tiap kelompok di panel
+fun Context.buildSectionTitle(text: String): TextView = TextView(this).apply {
+    this.text = text
+    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+    setTextColor(Palette.textDim)
+    isAllCaps = true
+    letterSpacing = 0.08f
+    setPadding(dp(8), dp(10), 0, dp(2))
+}
+
+// Baris atas: tombol ☰ dan 📋 tetap di kiri, pintasan cepat bisa digeser ke samping
 class ShortcutBar(
     private val context: Context,
     onShortcut: (Shortcut) -> Unit,
-    onTogglePanel: () -> Unit,
+    onToggleShortcuts: () -> Unit,
+    onToggleClipboard: () -> Unit,
 ) {
     val view = LinearLayout(context)
 
-    private val toggle = context.buildChip("☰", "Buka semua pintasan", KeyStyle.ACCENT) {
-        onTogglePanel()
+    private val menuButton = context.buildChip("☰", "Buka semua pintasan", KeyStyle.ACCENT) {
+        onToggleShortcuts()
+    }
+    private val clipboardButton = context.buildChip("📋", "Riwayat clipboard") {
+        onToggleClipboard()
     }
 
     init {
         view.orientation = LinearLayout.HORIZONTAL
         view.gravity = Gravity.CENTER_VERTICAL
-        view.addView(toggle, chipParams())
+        view.addView(menuButton, chipParams())
+        view.addView(clipboardButton, chipParams())
 
         val strip = LinearLayout(context)
         Shortcuts.quick.forEach { shortcut ->
@@ -46,9 +63,10 @@ class ShortcutBar(
         view.addView(scroller, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
     }
 
-    fun setPanelOpen(open: Boolean) {
-        toggle.text = if (open) "ABC" else "☰"
-        toggle.contentDescription = if (open) "Kembali ke keyboard" else "Buka semua pintasan"
+    fun setMode(mode: PanelMode) {
+        val open = mode != PanelMode.NONE
+        menuButton.text = if (open) "ABC" else "☰"
+        menuButton.contentDescription = if (open) "Kembali ke keyboard" else "Buka semua pintasan"
     }
 
     private fun chipParams() =
@@ -74,19 +92,10 @@ class ShortcutPanel(
             setPadding(context.dp(2), 0, context.dp(2), context.dp(6))
         }
         Shortcuts.groups.forEach { group ->
-            content.addView(title(group.title))
+            content.addView(context.buildSectionTitle(group.title))
             group.items.chunked(PANEL_COLUMNS).forEach { content.addView(row(it)) }
         }
         view.addView(content)
-    }
-
-    private fun title(text: String): TextView = TextView(context).apply {
-        this.text = text
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        setTextColor(Palette.textDim)
-        isAllCaps = true
-        letterSpacing = 0.08f
-        setPadding(context.dp(8), context.dp(10), 0, context.dp(2))
     }
 
     private fun row(items: List<Shortcut>): LinearLayout = LinearLayout(context).apply {
