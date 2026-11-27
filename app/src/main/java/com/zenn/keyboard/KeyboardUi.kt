@@ -7,8 +7,8 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 
-// Merangkai semua bagian: baris pintasan di atas, lalu satu area yang bisa
-// berisi tombol ketik, panel pintasan, riwayat clipboard, atau emoji
+// Merangkai semua bagian: baris pintasan di atas, lalu satu area yang bisa berisi
+// tombol ketik, panel pintasan, riwayat clipboard, emoji, atau simbol
 class KeyboardUi(
     private val context: Context,
     private val listener: Listener,
@@ -24,13 +24,28 @@ class KeyboardUi(
     val root: LinearLayout = LinearLayout(context)
     private var mode = PanelMode.NONE
 
-    private val typing = TypingKeys(context, listener) { setMode(PanelMode.EMOJI) }
+    private val typing = TypingKeys(
+        context,
+        listener,
+        onOpenSymbols = { setMode(PanelMode.SYMBOLS) },
+        onOpenEmoji = { setMode(PanelMode.EMOJI) },
+    )
     private val shortcutPanel = ShortcutPanel(context) { listener.onShortcut(it) }
     private val clipboardPanel = ClipboardPanel(context, history) { listener.onText(it) }
     private val emojiPanel = EmojiPanel(
         context,
         EmojiRecents(context),
         onEmoji = { listener.onText(it) },
+        onBackspace = { listener.onBackspace() },
+        onClose = { setMode(PanelMode.NONE) },
+    )
+    private val symbolPanel = SymbolPanel(
+        context,
+        onText = { listener.onText(it) },
+        onWrap = { open, close ->
+            val action = ShortcutAction.Wrap(open, close)
+            listener.onShortcut(Shortcut(open + close, "Pasangan $open $close", action))
+        },
         onBackspace = { listener.onBackspace() },
         onClose = { setMode(PanelMode.NONE) },
     )
@@ -54,7 +69,12 @@ class KeyboardUi(
         val panelHeight = context.dp(KEYS_AREA_HEIGHT_DP)
         val body = FrameLayout(context)
         body.addView(typing.view, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        listOf(shortcutPanel.view, clipboardPanel.view, emojiPanel.view).forEach { panel ->
+        listOf(
+            shortcutPanel.view,
+            clipboardPanel.view,
+            emojiPanel.view,
+            symbolPanel.view,
+        ).forEach { panel ->
             panel.visibility = View.GONE
             body.addView(panel, FrameLayout.LayoutParams(MATCH_PARENT, panelHeight))
         }
@@ -76,6 +96,7 @@ class KeyboardUi(
         shortcutPanel.view.visibility = visibleIf(next == PanelMode.SHORTCUTS)
         clipboardPanel.view.visibility = visibleIf(next == PanelMode.CLIPBOARD)
         emojiPanel.view.visibility = visibleIf(next == PanelMode.EMOJI)
+        symbolPanel.view.visibility = visibleIf(next == PanelMode.SYMBOLS)
         if (next == PanelMode.EMOJI) emojiPanel.show()
         bar.setMode(next)
     }
