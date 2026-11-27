@@ -15,7 +15,7 @@ private const val CHIP_HEIGHT_DP = 44
 private const val CHIP_GAP_DP = 3
 private const val PANEL_COLUMNS = 4
 
-enum class PanelMode { NONE, SHORTCUTS, CLIPBOARD }
+enum class PanelMode { NONE, SHORTCUTS, CLIPBOARD, EMOJI }
 
 // Judul kecil untuk tiap kelompok di panel
 fun Context.buildSectionTitle(text: String): TextView = TextView(this).apply {
