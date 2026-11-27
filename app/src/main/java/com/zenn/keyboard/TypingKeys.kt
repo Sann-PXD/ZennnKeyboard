@@ -12,15 +12,17 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 private const val DOUBLE_TAP_MS = 400L
-private const val EMOJI_KEY_WEIGHT = 1.3f
-private const val SPACE_WEIGHT = 4.2f
+private const val SYMBOLS_KEY_WEIGHT = 1.4f
+private const val EMOJI_KEY_WEIGHT = 1.2f
+private const val SPACE_WEIGHT = 3.4f
 
 enum class ShiftState { OFF, ONCE, LOCK }
 
-// Area tombol ketik: angka, huruf, shift, backspace, spasi, enter, dan tombol emoji
+// Area tombol ketik: angka, huruf, shift, backspace, spasi, enter, tombol ?123 dan emoji
 class TypingKeys(
     private val context: Context,
     private val listener: KeyboardUi.Listener,
+    private val onOpenSymbols: () -> Unit,
     private val onOpenEmoji: () -> Unit,
 ) {
     val view = LinearLayout(context)
@@ -65,7 +67,8 @@ class TypingKeys(
         )
         view.addView(
             row {
-                addView(emojiKey())
+                addView(chipKey("?123", "Simbol dan angka", SYMBOLS_KEY_WEIGHT, 14f, onOpenSymbols))
+                addView(chipKey("😀", "Emoji", EMOJI_KEY_WEIGHT, 18f, onOpenEmoji))
                 addView(textKey(","))
                 addView(key("Zenn", "Spasi", SPACE_WEIGHT, onPress = { listener.onText(" ") }))
                 addView(textKey("."))
@@ -83,12 +86,18 @@ class TypingKeys(
         onPress: () -> Unit,
     ): TextView = context.buildKey(handler, label, description, weight, style, repeatable, onPress)
 
-    // Aktif saat jari dilepas, supaya panel emoji tidak menangkap sisa sentuhan
-    private fun emojiKey(): TextView =
-        context.buildChip("😀", "Emoji", KeyStyle.ACTION) { onOpenEmoji() }.apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+    // Aktif saat jari dilepas, supaya panel yang terbuka tidak menangkap sisa sentuhan
+    private fun chipKey(
+        label: String,
+        description: String,
+        weight: Float,
+        textSp: Float,
+        onClick: () -> Unit,
+    ): TextView =
+        context.buildChip(label, description, KeyStyle.ACTION) { onClick() }.apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp)
             setPadding(0, 0, 0, 0)
-            layoutParams = LinearLayout.LayoutParams(0, context.dp(KEY_HEIGHT_DP), EMOJI_KEY_WEIGHT).apply {
+            layoutParams = LinearLayout.LayoutParams(0, context.dp(KEY_HEIGHT_DP), weight).apply {
                 val gap = context.dp(KEY_GAP_DP)
                 setMargins(gap, gap, gap, gap)
             }
