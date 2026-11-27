@@ -11,11 +11,26 @@ class ShortcutRunner(private val connection: () -> InputConnection?) {
         when (action) {
             is ShortcutAction.Menu -> ic.performContextMenuAction(action.id)
             is ShortcutAction.Combo -> sendCombo(ic, action)
+            is ShortcutAction.Wrap -> wrap(ic, action)
             ShortcutAction.SelectLine -> {
                 sendCombo(ic, ShortcutAction.Combo(KeyEvent.KEYCODE_MOVE_HOME))
                 sendCombo(ic, ShortcutAction.Combo(KeyEvent.KEYCODE_MOVE_END, shift = true))
             }
         }
+    }
+
+    private fun wrap(ic: InputConnection, action: ShortcutAction.Wrap) {
+        val selected = ic.getSelectedText(0)
+        ic.beginBatchEdit()
+        if (selected.isNullOrEmpty()) {
+            ic.commitText(action.open, 1)
+            // Posisi 0 = tepat sebelum teks yang baru disisipkan, jadi kursor
+            // berhenti di antara pembuka dan penutup
+            ic.commitText(action.close, 0)
+        } else {
+            ic.commitText(action.open + selected + action.close, 1)
+        }
+        ic.endBatchEdit()
     }
 
     // Modifier ditekan dulu, lalu tombol utama, lalu modifier dilepas (urutan terbalik)
