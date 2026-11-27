@@ -18,6 +18,7 @@ enum class ShiftState { OFF, ONCE, LOCK }
 class KeyboardUi(
     private val context: Context,
     private val listener: Listener,
+    history: ClipboardHistory,
 ) {
     interface Listener {
         fun onText(text: String)
@@ -33,13 +34,19 @@ class KeyboardUi(
     private var shiftKey: TextView? = null
     private var shift = ShiftState.OFF
     private var lastShiftTap = 0L
-    private var panelOpen = false
+    private var mode = PanelMode.NONE
 
-    private val panel = ShortcutPanel(context) { listener.onShortcut(it) }
+    private val shortcutPanel = ShortcutPanel(context) { listener.onShortcut(it) }
+    private val clipboardPanel = ClipboardPanel(context, history) { listener.onText(it) }
     private val bar = ShortcutBar(
         context,
         onShortcut = { listener.onShortcut(it) },
-        onTogglePanel = { setPanelOpen(!panelOpen) },
+        onToggleShortcuts = {
+            setMode(if (mode == PanelMode.NONE) PanelMode.SHORTCUTS else PanelMode.NONE)
+        },
+        onToggleClipboard = {
+            setMode(if (mode == PanelMode.CLIPBOARD) PanelMode.NONE else PanelMode.CLIPBOARD)
+        },
     )
 
     init {
@@ -50,29 +57,32 @@ class KeyboardUi(
         keysArea.orientation = LinearLayout.VERTICAL
         buildKeys()
 
-        // Panel pintasan menimpa area tombol huruf, tinggi dibuat sama
-        panel.view.visibility = View.GONE
+        // Panel menimpa area tombol huruf, tingginya dibuat sama
+        shortcutPanel.view.visibility = View.GONE
+        clipboardPanel.view.visibility = View.GONE
+        val panelHeight = context.dp(KEYS_AREA_HEIGHT_DP)
         val body = FrameLayout(context)
         body.addView(keysArea, FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        body.addView(
-            panel.view,
-            FrameLayout.LayoutParams(MATCH_PARENT, context.dp(KEYS_AREA_HEIGHT_DP)),
-        )
+        body.addView(shortcutPanel.view, FrameLayout.LayoutParams(MATCH_PARENT, panelHeight))
+        body.addView(clipboardPanel.view, FrameLayout.LayoutParams(MATCH_PARENT, panelHeight))
 
         root.addView(bar.view, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
         root.addView(body, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+
+        history.onChange = { clipboardPanel.refresh() }
     }
 
     fun reset() {
         setShift(ShiftState.OFF)
-        setPanelOpen(false)
+        setMode(PanelMode.NONE)
     }
 
-    private fun setPanelOpen(open: Boolean) {
-        panelOpen = open
-        panel.view.visibility = if (open) View.VISIBLE else View.GONE
-        keysArea.visibility = if (open) View.GONE else View.VISIBLE
-        bar.setPanelOpen(open)
+    private fun setMode(next: PanelMode) {
+        mode = next
+        keysArea.visibility = if (next == PanelMode.NONE) View.VISIBLE else View.GONE
+        shortcutPanel.view.visibility = if (next == PanelMode.SHORTCUTS) View.VISIBLE else View.GONE
+        clipboardPanel.view.visibility = if (next == PanelMode.CLIPBOARD) View.VISIBLE else View.GONE
+        bar.setMode(next)
     }
 
     private fun buildKeys() {
