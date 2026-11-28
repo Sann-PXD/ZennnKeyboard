@@ -13,9 +13,10 @@ import android.widget.ScrollView
 import android.widget.TextView
 
 private const val ROW_HEIGHT_DP = 44
-private const val ROW_GAP_DP = 3
+private const val ROW_GAP_DP = 2
 
-// Panel riwayat clipboard: ketuk item = tempel, ✕ = hapus item
+// Panel riwayat clipboard: ketuk item = tempel, ☆ = sematkan, ✕ = hapus.
+// Yang disematkan selalu di atas dan tidak ikut terhapus oleh "Bersihkan".
 class ClipboardPanel(
     private val context: Context,
     private val history: ClipboardHistory,
@@ -36,23 +37,33 @@ class ClipboardPanel(
     fun refresh() {
         content.removeAllViews()
         val items = history.snapshot()
-        content.addView(header(hasItems = items.isNotEmpty()))
+        val (pinned, recent) = items.partition { history.isPinned(it) }
+        content.addView(header(hasRecent = recent.isNotEmpty()))
         if (items.isEmpty()) {
             content.addView(emptyState())
-        } else {
-            items.forEach { content.addView(itemRow(it)) }
+            return
+        }
+        if (pinned.isNotEmpty()) {
+            content.addView(context.buildSectionTitle("Disematkan"))
+            pinned.forEach { content.addView(itemRow(it, pinned = true)) }
+        }
+        if (recent.isNotEmpty()) {
+            if (pinned.isNotEmpty()) content.addView(context.buildSectionTitle("Terbaru"))
+            recent.forEach { content.addView(itemRow(it, pinned = false)) }
         }
     }
 
-    private fun header(hasItems: Boolean): LinearLayout = LinearLayout(context).apply {
+    private fun header(hasRecent: Boolean): LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         addView(
             context.buildSectionTitle("Riwayat clipboard"),
             LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f),
         )
-        if (hasItems) {
-            val clear = context.buildChip("Hapus semua", "Hapus semua riwayat") { history.clear() }
+        if (hasRecent) {
+            val clear = context.buildChip("Bersihkan", "Hapus semua riwayat kecuali yang disematkan") {
+                history.clearUnpinned()
+            }
             addView(clear, LinearLayout.LayoutParams(WRAP_CONTENT, context.dp(ROW_HEIGHT_DP)))
         }
     }
@@ -65,7 +76,7 @@ class ClipboardPanel(
         setPadding(context.dp(16), context.dp(32), context.dp(16), context.dp(32))
     }
 
-    private fun itemRow(text: String): LinearLayout = LinearLayout(context).apply {
+    private fun itemRow(text: String, pinned: Boolean): LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
@@ -74,12 +85,19 @@ class ClipboardPanel(
         }
         addView(preview(text), LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
 
+        val pin = context.buildChip(
+            if (pinned) "★" else "☆",
+            if (pinned) "Lepas sematan" else "Sematkan",
+            if (pinned) KeyStyle.ACCENT else KeyStyle.ACTION,
+        ) { history.togglePin(text) }
         val delete = context.buildChip("✕", "Hapus dari riwayat") { history.remove(text) }
+        addView(pin, squareParams())
+        addView(delete, squareParams())
+    }
+
+    private fun squareParams(): LinearLayout.LayoutParams {
         val size = context.dp(ROW_HEIGHT_DP)
-        addView(
-            delete,
-            LinearLayout.LayoutParams(size, size).apply { setMargins(context.dp(ROW_GAP_DP), 0, 0, 0) },
-        )
+        return LinearLayout.LayoutParams(size, size).apply { setMargins(context.dp(ROW_GAP_DP), 0, 0, 0) }
     }
 
     private fun preview(text: String): TextView = TextView(context).apply {
