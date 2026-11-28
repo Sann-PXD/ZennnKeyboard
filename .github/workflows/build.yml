@@ -7,6 +7,11 @@ on:
 permissions:
   contents: write
 
+# Satu build pada satu waktu, supaya kunci tanda tangan hanya dibuat sekali
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,6 +22,19 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+
+      - name: Siapkan kunci tanda tangan tetap
+        run: |
+          if [ ! -f app/zenn-debug.jks ]; then
+            keytool -genkeypair -keystore app/zenn-debug.jks -storetype PKCS12 \
+              -storepass zennkeyboard -keypass zennkeyboard -alias zenn \
+              -keyalg RSA -keysize 2048 -validity 36500 -dname "CN=Zenn Keyboard"
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git add app/zenn-debug.jks
+            git commit -m "Tambah kunci tanda tangan tetap"
+            git push
+          fi
 
       - uses: gradle/actions/setup-gradle@v4
         with:
