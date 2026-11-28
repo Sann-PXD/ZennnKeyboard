@@ -8,12 +8,6 @@ import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 
-private const val BAR_BUTTON_HEIGHT_DP = 44
-private const val BAR_BUTTON_GAP_DP = 3
-
-// Posisi tombol 🌐 di baris atas: setelah ☰ dan 📋
-private const val TRANSLATE_BUTTON_INDEX = 2
-
 // Merangkai semua bagian: baris pintasan di atas, lalu satu area yang bisa berisi
 // tombol ketik, panel pintasan, riwayat clipboard, emoji, simbol, atau terjemahan
 class KeyboardUi(
@@ -71,23 +65,14 @@ class KeyboardUi(
         onToggleShortcuts = {
             setMode(if (mode == PanelMode.NONE) PanelMode.SHORTCUTS else PanelMode.NONE)
         },
-        onToggleClipboard = {
-            setMode(if (mode == PanelMode.CLIPBOARD) PanelMode.NONE else PanelMode.CLIPBOARD)
-        },
+        onToggleClipboard = { toggle(PanelMode.CLIPBOARD) },
+        onToggleTranslate = { toggle(PanelMode.TRANSLATE) },
     )
 
     init {
         root.orientation = LinearLayout.VERTICAL
         root.setBackgroundColor(Palette.background)
         root.setPadding(context.dp(4), context.dp(4), context.dp(4), context.dp(8))
-
-        val translateButton = context.buildChip("🌐", "Terjemahan") {
-            setMode(if (mode == PanelMode.TRANSLATE) PanelMode.NONE else PanelMode.TRANSLATE)
-        }
-        val gap = context.dp(BAR_BUTTON_GAP_DP)
-        val buttonParams = LinearLayout.LayoutParams(WRAP_CONTENT, context.dp(BAR_BUTTON_HEIGHT_DP))
-            .apply { setMargins(gap, gap, gap, gap) }
-        bar.view.addView(translateButton, TRANSLATE_BUTTON_INDEX, buttonParams)
 
         // Semua panel menimpa area tombol ketik dan tingginya dibuat sama
         val panelHeight = context.dp(KEYS_AREA_HEIGHT_DP)
@@ -114,6 +99,8 @@ class KeyboardUi(
         typing.resetShift()
         setMode(PanelMode.NONE)
     }
+
+    private fun toggle(target: PanelMode) = setMode(if (mode == target) PanelMode.NONE else target)
 
     private fun setMode(next: PanelMode) {
         mode = next
