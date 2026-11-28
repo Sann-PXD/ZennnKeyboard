@@ -11,14 +11,15 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 const val KEY_HEIGHT_DP = 48
-const val KEY_GAP_DP = 3
+const val KEY_GAP_DP = 2
 const val KEY_ROWS = 5
 const val KEYS_AREA_HEIGHT_DP = KEY_ROWS * (KEY_HEIGHT_DP + 2 * KEY_GAP_DP)
 
-private const val REPEAT_DELAY_MS = 400L
+private const val REPEAT_DELAY_MS = 350L
 private const val REPEAT_INTERVAL_MS = 45L
 
-// Tombol huruf: aksi jalan saat jari menyentuh (lebih responsif untuk mengetik)
+// Tombol ketik: karakter dikirim saat jari menyentuh. Tahan = mengulang (tombol
+// biasa seperti huruf/angka/spasi, dan tombol yang diberi repeatable seperti hapus).
 @SuppressLint("ClickableViewAccessibility")
 fun Context.buildKey(
     handler: Handler,
@@ -42,14 +43,15 @@ fun Context.buildKey(
         }
     }
 
-    val repeater = if (repeatable) Repeater(handler) else null
+    val repeater = if (repeatable || style == KeyStyle.NORMAL) Repeater(handler) else null
     view.setOnTouchListener { v, event ->
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 v.isPressed = true
-                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                // Karakter dikirim dulu; getaran memanggil sistem dan bisa memperlambat ketikan
                 onPress()
-                repeater?.start(onPress)
+                v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                repeater?.start({ v.isPressed && v.isAttachedToWindow }, onPress)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 v.isPressed = false
@@ -61,14 +63,18 @@ fun Context.buildKey(
     return view
 }
 
-// Tahan tombol = aksi berulang (dipakai backspace)
 private class Repeater(private val handler: Handler) {
     private var task: Runnable? = null
 
-    fun start(action: () -> Unit) {
+    // isHeld false (jari lepas / tampilan hilang) menghentikan pengulangan
+    fun start(isHeld: () -> Boolean, action: () -> Unit) {
         stop()
         val next = object : Runnable {
             override fun run() {
+                if (!isHeld()) {
+                    task = null
+                    return
+                }
                 action()
                 handler.postDelayed(this, REPEAT_INTERVAL_MS)
             }
