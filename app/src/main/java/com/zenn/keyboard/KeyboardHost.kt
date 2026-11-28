@@ -2,6 +2,7 @@ package com.zenn.keyboard
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
 import android.os.Looper
@@ -14,7 +15,6 @@ import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
@@ -31,7 +31,7 @@ private const val HOST_KEY_Y = "float_y"
 private const val HOST_UNSET = Int.MIN_VALUE
 
 // Tinggi tombol (dp): menempel dan melayang punya ukuran sendiri
-private const val HOST_DEFAULT_KEY_DP = 48
+private const val HOST_DEFAULT_KEY_DP = 44
 private const val HOST_MIN_KEY_DP = 26
 private const val HOST_MAX_KEY_DP = 72
 private const val HOST_FLOAT_DEFAULT_KEY_DP = 34
@@ -39,21 +39,24 @@ private const val HOST_FLOAT_MIN_KEY_DP = 18
 private const val HOST_FLOAT_MAX_KEY_DP = 60
 
 // Lebar keyboard melayang (dp)
-private const val HOST_FLOAT_MIN_WIDTH_DP = 220
+private const val HOST_FLOAT_MIN_WIDTH_DP = 260
 private const val HOST_FLOAT_DEFAULT_MAX_WIDTH_DP = 380
 private const val HOST_FLOAT_DEFAULT_WIDTH_FRACTION = 0.8f
 
-// Susunan di dalam keyboard: [pegangan, baris atas, area isi, pegangan ukuran (melayang)]
+// Susunan di dalam keyboard: [pegangan, baris atas (2 baris), area isi, pegangan ukuran (melayang)]
 private const val HOST_BAR_INDEX = 1
 private const val HOST_BODY_INDEX = 2
-private const val HOST_GRIP_HEIGHT_DP = 20
+private const val HOST_GRIP_HEIGHT_DP = 18
 private const val HOST_FOOTER_DP = 24
 private const val HOST_PILL_WIDTH_DP = 40
 private const val HOST_PILL_HEIGHT_DP = 4
-private const val HOST_DIVIDER_DP = 22
 
-// Tinggi bagian selain deretan tombol: pegangan + baris atas + padding
-private const val HOST_CHROME_DP = 74
+// Tinggi bagian selain deretan tombol: pegangan + 2 baris atas + padding
+private const val HOST_CHROME_DP = 104
+private const val HOST_BAR_ROW_DP = 40
+
+// Layar lebih pendek dari ini (landscape): baris kode di atas disembunyikan
+private const val HOST_COMPACT_BELOW_DP = 480
 
 // Batas tinggi keyboard terhadap layar; menempel dibatasi lebih ketat (penting di landscape)
 private const val HOST_MAX_SCREEN_FRACTION = 0.6f
@@ -64,10 +67,11 @@ private const val HOST_TEXT_RATIO = 0.38f
 private const val HOST_TEXT_MIN_SP = 9f
 private const val HOST_TEXT_MAX_SP = 20f
 private const val HOST_LONG_LABEL_SCALE = 0.75f
-private const val HOST_BAR_RATIO = 0.85f
-private const val HOST_BAR_MIN_DP = 32
-private const val HOST_BAR_MAX_DP = 40
+private const val HOST_BAR_RATIO = 0.8f
+private const val HOST_BAR_MIN_DP = 30
+private const val HOST_BAR_MAX_DP = 38
 
+private const val HOST_CORNER_DP = 18
 private const val HOST_FLOAT_MARGIN_DP = 48
 private const val HOST_FLOAT_ELEVATION_DP = 8
 private const val HOST_PLACEHOLDER_DP = 1
@@ -75,7 +79,7 @@ private const val HOST_PLACE_RETRY_MS = 30L
 private const val HOST_PLACE_MAX_RETRY = 10
 
 // Mengatur tempat dan ukuran keyboard: menempel di bawah atau melayang, tinggi tombol,
-// penyesuaian layar kecil/landscape, dan kerapian ukuran antar bagian.
+// penyesuaian layar kecil/landscape, dan latar kaca.
 // Pegangan atas: geser = ubah tinggi (menempel) / pindah (melayang), tahan = ganti mode.
 // Pegangan bawah (hanya saat melayang): geser = ubah lebar dan tinggi.
 class KeyboardHost(
@@ -119,7 +123,6 @@ class KeyboardHost(
         ui.root.setPadding(service.dp(3), 0, service.dp(3), service.dp(6))
         ui.root.addView(buildGrip(), 0)
         ui.root.addView(buildFooter())
-        addBarDivider()
         applyMetrics()
         if (floating) showPlaceholder() else dock()
         refreshState()
@@ -230,11 +233,15 @@ class KeyboardHost(
         return service.dp(widthDp.coerceAtLeast(HOST_FLOAT_MIN_WIDTH_DP.toFloat()).coerceAtMost(screenDp).toInt())
     }
 
+    private fun isCompact(): Boolean = metrics.heightPixels < service.dp(HOST_COMPACT_BELOW_DP)
+
     // Tinggi tombol yang diinginkan, dibatasi supaya keyboard tidak melebihi sebagian
     // layar tetapi tidak lebih kecil dari batas minimum
     private fun fitKeyHeightPx(): Int {
         val fraction = if (floating) HOST_FLOAT_MAX_SCREEN_FRACTION else HOST_MAX_SCREEN_FRACTION
-        val chromeDp = HOST_CHROME_DP + if (floating) HOST_FOOTER_DP else 0
+        var chromeDp = HOST_CHROME_DP
+        if (isCompact()) chromeDp -= HOST_BAR_ROW_DP
+        if (floating) chromeDp += HOST_FOOTER_DP
         val maxTotal = (metrics.heightPixels * fraction).toInt()
         val maxKey = (maxTotal - service.dp(chromeDp)) / KEY_ROWS - 2 * service.dp(KEY_GAP_DP)
         val minDp = if (floating) HOST_FLOAT_MIN_KEY_DP else HOST_MIN_KEY_DP
@@ -252,8 +259,14 @@ class KeyboardHost(
         val panelPx = KEY_ROWS * (keyPx + 2 * service.dp(KEY_GAP_DP))
 
         (ui.root.getChildAt(HOST_BAR_INDEX) as? ViewGroup)?.let { bar ->
-            forEachChip(bar) { setHeight(it, barPx) }
+            for (r in 0 until bar.childCount) {
+                val row = bar.getChildAt(r) as? ViewGroup ?: continue
+                // Baris kode disembunyikan di layar pendek; isinya tersedia di panel ☰
+                row.visibility = if (r > 0 && isCompact()) View.GONE else View.VISIBLE
+                for (c in 0 until row.childCount) setHeight(row.getChildAt(c), barPx)
+            }
         }
+
         val body = ui.root.getChildAt(HOST_BODY_INDEX) as? ViewGroup ?: return
         (body.getChildAt(0) as? ViewGroup)?.let { typing ->
             for (r in 0 until typing.childCount) {
@@ -273,36 +286,11 @@ class KeyboardHost(
         for (i in 1 until body.childCount) setHeight(body.getChildAt(i), panelPx)
     }
 
-    // Chip baris atas: tombol tetap + chip di dalam deretan yang bisa digeser
-    private fun forEachChip(bar: ViewGroup, action: (View) -> Unit) {
-        for (i in 0 until bar.childCount) {
-            val child = bar.getChildAt(i)
-            if (child is TextView) {
-                action(child)
-            } else if (child is HorizontalScrollView) {
-                val strip = child.getChildAt(0) as? ViewGroup ?: continue
-                for (j in 0 until strip.childCount) action(strip.getChildAt(j))
-            }
-        }
-    }
-
     private fun setHeight(target: View, px: Int) {
         val params = target.layoutParams ?: return
         if (params.height == px) return
         params.height = px
         target.layoutParams = params
-    }
-
-    // Garis tipis pemisah antara tombol tetap dan deretan pintasan
-    private fun addBarDivider() {
-        val bar = ui.root.getChildAt(HOST_BAR_INDEX) as? ViewGroup ?: return
-        val at = (0 until bar.childCount).firstOrNull { bar.getChildAt(it) is HorizontalScrollView } ?: return
-        val divider = View(service).apply { setBackgroundColor(Palette.keyPressed) }
-        val params = LinearLayout.LayoutParams(service.dp(1), service.dp(HOST_DIVIDER_DP)).apply {
-            setMargins(service.dp(4), 0, service.dp(4), 0)
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        bar.addView(divider, at, params)
     }
 
     private fun resizeDocked(dy: Float) {
@@ -336,10 +324,28 @@ class KeyboardHost(
             .apply()
     }
 
+    // Latar kaca: gradasi gelap transparan + garis tepi tipis; sudut membulat penuh saat melayang
+    private fun applyGlass() {
+        val radius = service.dp(HOST_CORNER_DP).toFloat()
+        val radii = if (floating) {
+            FloatArray(8) { radius }
+        } else {
+            floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
+        }
+        ui.root.background = GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(Palette.glassTop, Palette.glassBottom),
+        ).apply {
+            cornerRadii = radii
+            setStroke(1, Palette.stroke)
+        }
+    }
+
     private fun refreshState() {
         val color = if (floating) Palette.accent else Palette.textDim
         pill.background = service.roundedBackground(color, color, 2)
         footer.visibility = if (floating) View.VISIBLE else View.GONE
+        applyGlass()
     }
 
     @SuppressLint("ClickableViewAccessibility")
