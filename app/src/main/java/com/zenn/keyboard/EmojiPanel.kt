@@ -22,11 +22,12 @@ private const val COLUMNS = 8
 private const val CELL_HEIGHT_DP = 44
 private const val CELL_TEXT_SP = 26f
 private const val TAB_HEIGHT_DP = 44
-private const val TAB_GAP_DP = 3
+private const val TAB_GAP_DP = 2
 private const val TAB_ICON_SP = 18f
 private const val BACKSPACE_WIDTH_DP = 56
 
-// Panel emoji: grid di atas, baris kategori di bawah (ABC | kategori | ⌫)
+// Panel emoji: grid di atas, baris kategori di bawah (ABC | kategori | ⌫).
+// Tahan emoji = sematkan/lepas sematan. Yang disematkan selalu di awal "Terbaru".
 class EmojiPanel(
     private val context: Context,
     private val recents: EmojiRecents,
@@ -37,9 +38,10 @@ class EmojiPanel(
     val view = LinearLayout(context)
 
     private val handler = Handler(Looper.getMainLooper())
-    private val adapter = EmojiAdapter(context)
+    private val adapter = EmojiAdapter(context) { recents.isPinned(it) }
     private val grid = GridView(context)
     private val tabs = linkedMapOf<EmojiCategory, TextView>()
+    private var current = EmojiCategory.FACES
 
     init {
         view.orientation = LinearLayout.VERTICAL
@@ -51,10 +53,15 @@ class EmojiPanel(
         grid.selector = context.roundedBackground(Palette.keyPressed, Palette.keyPressed)
         grid.adapter = adapter
         grid.setOnItemClickListener { _, cell, position, _ -> pick(adapter.getItem(position), cell) }
+        grid.setOnItemLongClickListener { _, cell, position, _ ->
+            cell.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            togglePin(adapter.getItem(position))
+            true
+        }
 
-        // Tampilan kosong, dipakai kategori "Terbaru" saat belum ada riwayat
+        // Tampilan kosong untuk "Terbaru" saat belum ada riwayat
         val empty = TextView(context).apply {
-            text = "Belum ada emoji terbaru.\nPilih emoji, nanti muncul di sini."
+            text = "Belum ada emoji terbaru.\nPilih emoji, atau tahan emoji untuk menyematkannya."
             gravity = Gravity.CENTER
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setTextColor(Palette.textDim)
@@ -70,7 +77,7 @@ class EmojiPanel(
         select(EmojiCategory.FACES)
     }
 
-    // Dipanggil saat panel dibuka: mulai dari "Terbaru" kalau sudah ada riwayat
+    // Dipanggil saat panel dibuka: mulai dari "Terbaru" kalau sudah ada riwayat atau sematan
     fun show() {
         select(if (recents.snapshot().isEmpty()) EmojiCategory.FACES else EmojiCategory.RECENT)
     }
@@ -81,7 +88,14 @@ class EmojiPanel(
         onEmoji(emoji)
     }
 
+    private fun togglePin(emoji: String) {
+        recents.togglePin(emoji)
+        // "Terbaru" berubah urutan; kategori lain cukup digambar ulang agar posisi scroll tetap
+        if (current == EmojiCategory.RECENT) select(EmojiCategory.RECENT) else adapter.notifyDataSetChanged()
+    }
+
     private fun select(category: EmojiCategory) {
+        current = category
         val list = if (category == EmojiCategory.RECENT) {
             recents.snapshot()
         } else {
@@ -146,7 +160,10 @@ class EmojiPanel(
         }
 }
 
-private class EmojiAdapter(private val context: Context) : BaseAdapter() {
+private class EmojiAdapter(
+    private val context: Context,
+    private val isPinned: (String) -> Boolean,
+) : BaseAdapter() {
     private var items: List<String> = emptyList()
 
     fun submit(list: List<String>) {
@@ -166,7 +183,10 @@ private class EmojiAdapter(private val context: Context) : BaseAdapter() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, CELL_TEXT_SP)
             layoutParams = AbsListView.LayoutParams(MATCH_PARENT, context.dp(CELL_HEIGHT_DP))
         }
-        cell.text = items[position]
+        val emoji = items[position]
+        cell.text = emoji
+        // Emoji yang disematkan diberi latar agar mudah dikenali
+        cell.background = if (isPinned(emoji)) context.roundedBackground(Palette.key, Palette.key, 10) else null
         return cell
     }
 }
