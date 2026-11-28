@@ -7,6 +7,7 @@ import android.view.inputmethod.EditorInfo
 class KeyboardService : InputMethodService(), KeyboardUi.Listener {
 
     private var ui: KeyboardUi? = null
+    private var host: KeyboardHost? = null
     private lateinit var history: ClipboardHistory
     private val runner = ShortcutRunner { currentInputConnection }
 
@@ -17,14 +18,31 @@ class KeyboardService : InputMethodService(), KeyboardUi.Listener {
     }
 
     override fun onDestroy() {
+        host?.destroy()
         history.stop()
         super.onDestroy()
     }
 
+    // Landscape: jangan ganti layar dengan kolom teks bawaan yang menutupi seluruh layar
+    override fun onEvaluateFullscreenMode(): Boolean = false
+
     override fun onCreateInputView(): View {
+        host?.destroy()
         val built = KeyboardUi(this, this, history)
+        val newHost = KeyboardHost(this, built)
         ui = built
-        return built.root
+        host = newHost
+        return newHost.view
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        host?.onShown()
+    }
+
+    override fun onWindowHidden() {
+        super.onWindowHidden()
+        host?.onHidden()
     }
 
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
@@ -32,6 +50,8 @@ class KeyboardService : InputMethodService(), KeyboardUi.Listener {
         // Tangkap salinan terakhir yang dibuat saat keyboard lain aktif
         history.captureCurrent()
         ui?.reset()
+        // Setelah rotasi layar, jendela tidak melaporkan "tampil" lagi
+        host?.onShown()
     }
 
     override fun onText(text: String) {
