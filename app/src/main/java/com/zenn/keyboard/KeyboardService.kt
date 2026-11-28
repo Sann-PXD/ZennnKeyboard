@@ -1,6 +1,8 @@
 package com.zenn.keyboard
 
 import android.inputmethodservice.InputMethodService
+import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 
@@ -58,13 +60,13 @@ class KeyboardService : InputMethodService(), KeyboardUi.Listener {
         currentInputConnection?.commitText(text, 1)
     }
 
+    // Tombol DEL dikirim searah tanpa menunggu balasan aplikasi (lebih cepat daripada
+    // membaca teks terpilih dulu). Menghapus pilihan kalau ada, kalau tidak 1 karakter.
     override fun onBackspace() {
         val ic = currentInputConnection ?: return
-        if (ic.getSelectedText(0).isNullOrEmpty()) {
-            ic.deleteSurroundingTextInCodePoints(1, 0)
-        } else {
-            ic.commitText("", 1)
-        }
+        val now = SystemClock.uptimeMillis()
+        ic.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL, 0))
+        ic.sendKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_DEL, 0))
     }
 
     override fun onEnter() {
