@@ -1,12 +1,21 @@
 package com.zenn.keyboard
 
 import android.content.Context
+import android.content.Intent
 import android.inputmethodservice.InputMethodService
+import android.text.InputType
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+import android.view.inputmethod.EditorInfo
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+
+// Seberapa jauh ke belakang kursor dibaca untuk mencari email yang sudah terlanjur diketik
+private const val EMAIL_LOOKBEHIND = 100
+
+// Kolom teks biasa yang meminta email biasanya menyebut kata ini di hint/labelnya
+private val EMAIL_HINTS = listOf("mail", "surel")
 
 // Merangkai semua bagian: baris pintasan di atas, lalu satu area yang bisa berisi
 // tombol ketik, panel pintasan, riwayat clipboard, emoji, simbol, atau terjemahan
@@ -67,6 +76,8 @@ class KeyboardUi(
         },
         onToggleClipboard = { toggle(PanelMode.CLIPBOARD) },
         onToggleTranslate = { toggle(PanelMode.TRANSLATE) },
+        onEmailPick = { pickEmail(it) },
+        onEmailSetup = { openEmailSetup() },
     )
 
     init {
@@ -95,9 +106,53 @@ class KeyboardUi(
         history.onChange = { clipboardPanel.refresh() }
     }
 
+    // Dipanggil setiap pindah ke kolom teks baru
     fun reset() {
         typing.resetShift()
         setMode(PanelMode.NONE)
+        // Daftar email dibaca ulang tiap kali karena bisa diubah dari aplikasi
+        val suggestions = if (isEmailField(service?.currentInputEditorInfo)) {
+            EmailStore(context).snapshot()
+        } else {
+            null
+        }
+        bar.setEmailSuggestions(suggestions)
+    }
+
+    private fun isEmailField(info: EditorInfo?): Boolean {
+        if (info == null) return false
+        val type = info.inputType
+        if ((type and InputType.TYPE_MASK_CLASS) == InputType.TYPE_CLASS_TEXT) {
+            val variation = type and InputType.TYPE_MASK_VARIATION
+            if (variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
+            ) {
+                return true
+            }
+        }
+        val hint = "${info.hintText} ${info.label}".lowercase()
+        return EMAIL_HINTS.any { it in hint }
+    }
+
+    // Bagian email yang sudah terlanjur diketik (sampai spasi atau pemisah terakhir)
+    // diganti dengan email lengkap
+    private fun pickEmail(email: String) {
+        val ic = service?.currentInputConnection ?: return
+        val before = ic.getTextBeforeCursor(EMAIL_LOOKBEHIND, 0)?.toString().orEmpty()
+        val typed = before.takeLastWhile { !it.isWhitespace() && it != ',' && it != ';' }
+        ic.beginBatchEdit()
+        if (typed.isNotEmpty()) ic.deleteSurroundingText(typed.length, 0)
+        ic.commitText(email, 1)
+        ic.endBatchEdit()
+        // Yang baru dipakai naik ke urutan pertama
+        EmailStore(context).add(email)
+    }
+
+    private fun openEmailSetup() {
+        val intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(MainActivity.EXTRA_ADD_EMAIL, true)
+        context.startActivity(intent)
     }
 
     private fun toggle(target: PanelMode) = setMode(if (mode == target) PanelMode.NONE else target)
